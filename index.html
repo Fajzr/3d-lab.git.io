@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+    <style>
+        * { margin: 0; padding: 0; overflow: hidden; }
+        body { background-color: black; font-family: sans-serif; }
+        h1 { 
+            color: white; position: fixed; left: 50%; 
+            transform: translate(-50%, 0); z-index: 10; 
+            text-shadow: 2px 2px 5px black;
+        }
+        #ui-layer {
+            position: fixed; bottom: 20px; left: 20px;
+            width: 150px; height: 150px;
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 50%; touch-action: none;
+        }
+        #joystick {
+            position: absolute; width: 50px; height: 50px;
+            background: white; border-radius: 50%;
+            top: 50px; left: 50px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to my 3D Website</h1>
+    <canvas id='canvas'></canvas>
+    
+    <!-- GUI Joystick untuk Mobile -->
+    <div id="ui-layer">
+        <div id="joystick"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Map Data (0: Kosong, 1: Tembok)
+        const map = [
+            1,1,1,1,1,1,1,1,1,1,
+            1,0,0,0,0,0,0,0,0,1,
+            1,0,0,0,0,0,0,0,0,1,
+            1,0,0,1,1,1,0,0,0,1,
+            1,0,0,1,0,0,0,0,0,1,
+            1,0,0,1,0,0,0,0,0,1,
+            1,0,0,1,1,1,0,0,0,1,
+            1,0,0,0,0,0,0,0,0,1,
+            1,0,0,0,0,0,0,0,0,1,
+            1,1,1,1,1,1,1,1,1,1,
+        ];
+        const mapSize = 10;
+        const tileSize = 64;
+
+        // Player State
+        let px = 150, py = 150, pa = 0; // Position X, Y, and Angle
+        let moveDir = 0, turnDir = 0;
+
+        // Keyboard Controls
+        window.onkeydown = (e) => {
+            if(e.key == "w") moveDir = 1;
+            if(e.key == "s") moveDir = -1;
+            if(e.key == "a") turnDir = -0.21;
+            if(e.key == "d") turnDir = 0.21;
+        };
+        window.onkeyup = (e) => {
+            if(["w","s"].includes(e.key)) moveDir = 0;
+            if(["a","d"].includes(e.key)) turnDir = 0;
+        };
+
+        // Joystick Logic
+        const stick = document.getElementById('joystick');
+        const ui = document.getElementById('ui-layer');
+        ui.addEventListener('touchmove', (e) => {
+            let touch = e.touches[0];
+            let rect = ui.getBoundingClientRect();
+            let x = touch.clientX - rect.left - 75;
+            let y = touch.clientY - rect.top - 75;
+            
+            // Limit movement
+            let dist = Math.sqrt(x*x + y*y);
+            if (dist > 50) { x *= 50/dist; y *= 50/dist; }
+            
+            stick.style.transform = `translate(${x}px, ${y}px)`;
+            moveDir = y < -20 ? 1 : (y > 20 ? -1 : 0);
+            turnDir = x < -20 ? -1 : (x > 20 ? 1 : 0);
+        });
+        ui.addEventListener('touchend', () => {
+            stick.style.transform = `translate(0px, 0px)`;
+            moveDir = 0; turnDir = 0;
+        });
+
+        function raycast() {
+            // Background (Langit & Lantai)
+            ctx.fillStyle = "#333"; ctx.fillRect(0, 0, canvas.width, canvas.height/2);
+            ctx.fillStyle = "#666"; ctx.fillRect(0, canvas.height/2, canvas.width, canvas.height/2);
+
+            const FOV = Math.PI / 3;
+            const step = FOV / canvas.width;
+            let rayAngle = pa - FOV/2;
+
+            for (let i = 0; i < canvas.width; i++) {
+                let rx = px, ry = py;
+                let sinA = Math.sin(rayAngle), cosA = Math.cos(rayAngle);
+
+                // Incremental ray movement (Simple version)
+                let dist = 0;
+                while (dist < 600) {
+                    dist += 2;
+                    rx = px + cosA * dist;
+                    ry = py + sinA * dist;
+                    
+                    let mx = Math.floor(rx / tileSize);
+                    let my = Math.floor(ry / tileSize);
+                    
+                    if (map[my * mapSize + mx] === 1) {
+                        // Fix Fisheye effect
+                        let fixDist = dist * Math.cos(rayAngle - pa);
+                        let wallH = (tileSize *2* canvas.height) / fixDist;
+                        
+                        // Draw Wall
+                        let color = 255 - (dist * 0.4); // Shading based on distance
+                        ctx.fillStyle = `rgb(0, ${color}, ${color})`;
+                        ctx.fillRect(i, (canvas.height - wallH)/2, 1, wallH);
+                        break;
+                    }
+                }
+                rayAngle += step;
+            }
+        }
+
+        function update() {
+            // Update movement
+            pa += turnDir * 0.05;
+            let nx = px + Math.cos(pa) * moveDir * 3;
+            let ny = py + Math.sin(pa) * moveDir * 3;
+
+            // Simple Collision
+            if (map[Math.floor(ny/tileSize)*mapSize + Math.floor(nx/tileSize)] === 0) {
+                px = nx; py = ny;
+            }
+
+            raycast();
+            requestAnimationFrame(update);
+        }
+
+        update();
+    </script>
+</body>
+</html>
